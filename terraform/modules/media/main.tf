@@ -93,9 +93,9 @@ resource "aws_lambda_function" "processor" {
   timeout          = 300
   layers           = [aws_lambda_layer_version.ffmpeg.arn, aws_lambda_layer_version.imaging.arn]
 
-  # Bulk uploads fan out one invocation per object; each rebuilds the manifest.
-  # Capping concurrency keeps those writes from trampling each other.
-  reserved_concurrent_executions = 2
+  # No reserved concurrency: the handler no longer rebuilds the manifest per
+  # object, so a bulk upload is linear and needs no cap. Capping it throttled
+  # ~15k events in two hours and thumbnails never appeared.
 
   ephemeral_storage {
     size = 5120

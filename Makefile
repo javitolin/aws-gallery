@@ -8,7 +8,7 @@ endif
 
 VENV := .venv/bin
 
-.PHONY: help venv layers test dev plan apply site backfill publish publish-check transcode cert-status outputs
+.PHONY: help venv layers test dev plan apply site backfill publish publish-check transcode rebuild add-user cert-status outputs
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
@@ -31,6 +31,22 @@ apply: ## apply infrastructure
 
 site: ## publish site/ and invalidate the edge
 	./scripts/deploy-site.sh
+
+add-user: ## add a gallery user: make add-user EMAIL=them@example.com
+	@test -n "$(EMAIL)" || { echo "usage: make add-user EMAIL=them@example.com"; exit 1; }
+	@pool=$$(cd terraform && terraform output -raw user_pool_id); \
+	 pw="Gallery-$$($(VENV)/python -c 'import secrets,string;a=string.ascii_letters+string.digits;print("".join(secrets.choice(a) for _ in range(14)))')"; \
+	 aws cognito-idp admin-create-user --user-pool-id $$pool --username "$(EMAIL)" \
+	   --user-attributes Name=email,Value="$(EMAIL)" Name=email_verified,Value=true \
+	   --message-action SUPPRESS --query 'User.UserStatus' --output text >/dev/null && \
+	 aws cognito-idp admin-set-user-password --user-pool-id $$pool --username "$(EMAIL)" --password "$$pw" && \
+	 echo "" && echo "  user:     $(EMAIL)" && echo "  password: $$pw" && \
+	 echo "  they must change it at first sign-in. Send it out-of-band, not by email."
+
+rebuild: ## rebuild manifest.json from the sidecars
+	@aws lambda invoke --function-name gallery-media-processor \
+	  --payload '{"rebuild":true}' --cli-binary-format raw-in-base64-out /dev/stdout >/dev/null \
+	  && echo "manifest rebuilt"
 
 backfill: ## regenerate thumbnails and metadata for existing media
 	$(VENV)/python scripts/backfill.py

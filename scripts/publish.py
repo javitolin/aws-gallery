@@ -276,6 +276,15 @@ def main():
 
     save_checkpoint(state)
     print(f"\n{len(plan)-failures} uploaded, {failures} failed, {len(done)} total in checkpoint")
+
+    if plan:
+        # Per-object rebuilds race and the last one may not be the last upload.
+        print("rebuilding manifest…")
+        boto3.client("lambda").invoke(
+            FunctionName="gallery-media-processor",
+            InvocationType="Event",
+            Payload=json.dumps({"Records": []}).encode(),
+        )
     return 1 if failures else 0
 
 

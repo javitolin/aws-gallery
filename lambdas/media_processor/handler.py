@@ -127,20 +127,30 @@ def _remove(key: str) -> None:
 
 
 def lambda_handler(event, _context):
-    touched = 0
-    for record in event.get("Records", []):
+    """Per-object work only, unless asked to rebuild.
+
+    Rebuilding the manifest reads every sidecar, so doing it per object made a
+    bulk upload quadratic and forced a concurrency cap that silently dropped S3
+    events. Uploads end with one explicit rebuild instead; removals rebuild
+    immediately since nothing else will.
+    """
+    records = event.get("Records", [])
+    rebuild_only = not records or event.get("rebuild")
+
+    touched = removed = 0
+    for record in records:
         key = urllib.parse.unquote_plus(record["s3"]["object"]["key"])
         if not key.startswith(MEDIA_PREFIX) or key.endswith("/"):
             continue
         if record["eventName"].startswith("ObjectRemoved"):
             _remove(key)
+            removed += 1
         else:
             _process(key)
-        touched += 1
+            touched += 1
 
-    result = manifest.rebuild(BUCKET, META_PREFIX, ARCHIVE_PREFIX, MANIFEST_KEY)
-    return {
-        "touched": touched,
-        "items": len(result["items"]),
-        "archive": len(result["archive"]),
-    }
+    if rebuild_only or removed:
+        result = manifest.rebuild(BUCKET, META_PREFIX, ARCHIVE_PREFIX, MANIFEST_KEY)
+        return {"touched": touched, "removed": removed,
+                "items": len(result["items"]), "rebuilt": True}
+    return {"touched": touched, "rebuilt": False}

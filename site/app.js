@@ -352,6 +352,13 @@ async function bodyHash(body) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// A session predating a change to what the login issues is still valid to
+// CloudFront but missing the identity cookie, so the API answers 401. Sending
+// the viewer back through login is always the right response.
+function reauthenticate() {
+  window.location.href = "/auth/login?next=" + encodeURIComponent(window.location.pathname);
+}
+
 async function postJson(path, payload) {
   const body = JSON.stringify(payload);
   return fetch(path, {
@@ -370,7 +377,7 @@ async function post(path, payload, button, busyLabel) {
   button.textContent = busyLabel;
   try {
     const response = await postJson(path, payload);
-    if (response.status === 401) { window.location.href = "/auth/login"; return false; }
+    if (response.status === 401) { reauthenticate(); return false; }
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || `failed (${response.status})`);
     return true;
@@ -388,6 +395,7 @@ async function setFavourite(key, on, node) {
   node.classList.toggle("on", on);
   try {
     const response = await postJson("/api/favourite", { keys: [key], on });
+    if (response.status === 401) return reauthenticate();
     if (!response.ok) throw new Error(`failed (${response.status})`);
     favourites = new Set((await response.json()).favourites || []);
     renderChips();
@@ -411,6 +419,7 @@ async function favouriteSelected() {
 async function loadFavourites() {
   try {
     const response = await fetch("/api/favourites", { cache: "no-store" });
+    if (response.status === 401) return reauthenticate();
     if (response.ok) favourites = new Set((await response.json()).favourites || []);
   } catch {
     favourites = new Set();
@@ -572,7 +581,7 @@ el("cat-input").addEventListener("keydown", (e) => {
 async function load() {
   try {
     const response = await fetch(MANIFEST, { cache: "no-cache" });
-    if (response.status === 403) { window.location.href = "/auth/login"; return; }
+    if (response.status === 403 || response.status === 401) return reauthenticate();
     if (!response.ok) throw new Error(`manifest returned ${response.status}`);
     const manifest = await response.json();
 

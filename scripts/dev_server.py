@@ -9,18 +9,29 @@ Two sources:
 Static files always come off disk, so an edit is visible on refresh.
 """
 import argparse
-import functools
 import html
 import http.server
 import json
 import mimetypes
 import os
 import subprocess
+import sys
 import urllib.parse
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
+from typing import Iterator
 
 ROOT = Path(__file__).resolve().parent.parent
+# The gallery actions are implemented once, in the Lambda package, and reused
+# here over a local store so the preview cannot drift from production.
+sys.path[:0] = [str(ROOT / "lambdas" / "api"), str(ROOT / "lambdas" / "media_processor")]
+
+# Imported after the path is set, because these live in the Lambda packages and
+# are deliberately the same code the deployed API runs.
+import boto3  # noqa: E402
+import mutations  # noqa: E402
+from models import MediaRecord  # noqa: E402
 SITE = ROOT / "site"
 CACHE = ROOT / ".devcache"
 
@@ -35,44 +46,110 @@ AUDIO_EXT = {".mp3", ".m4a", ".wav", ".flac"}
 PLAYABLE = IMAGE_EXT | {".mp4", ".mov", ".m4v", ".webm", ".mp3", ".m4a", ".wav", ".ogg"}
 SKIP = {".sfk", ".ds_store", ".veg", ".bak"}
 
-state = {"mode": "s3", "source": None, "manifest": None}
+class LocalStore:
+    """Same protocol as S3Store, backed by files under the dev cache."""
+
+    def __init__(self, root: Path) -> None:
+        self._root = root
+
+    def _path(self, key: str) -> Path:
+        return self._root / key
+
+    def get(self, key: str) -> bytes | None:
+        path = self._path(key)
+        return path.read_bytes() if path.exists() else None
+
+    def put(self, key: str, body: bytes, content_type: str = "application/json") -> None:
+        path = self._path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+
+    def list(self, prefix: str) -> Iterator[str]:
+        base = self._path(prefix)
+        if not base.exists():
+            return
+        for path in base.rglob("*"):
+            if path.is_file():
+                yield str(path.relative_to(self._root))
+
+    def tag(self, key: str, tags: dict[str, str]) -> None:
+        """No object tags locally; the sidecar already carries the same state."""
+
+
+state = {"mode": "s3", "source": None, "manifest": None, "store": None}
 # Archiving in local mode is recorded here so the preview survives a restart.
-ARCHIVED_FILE = CACHE / "archived.json"
+def seed_sidecars() -> None:
+    """Write a sidecar per scanned file so the shared mutations have something
+    to act on, exactly as publish.py does before uploading."""
+    store = state["store"]
+    for item in state["manifest"]["all"]:
+        if store.get(mutations.sidecar_key(item["key"])):
+            continue  # keep earlier local edits
+        store.put(mutations.sidecar_key(item["key"]),
+                  MediaRecord.model_validate(item).to_json())
 
 
-def load_archived() -> set[str]:
-    if ARCHIVED_FILE.exists():
-        return set(json.loads(ARCHIVED_FILE.read_text()))
-    return set()
+def local_manifest() -> dict:
+    """Same split the production manifest builder makes, over local sidecars."""
+    store = state["store"]
+    records = []
+    for key in store.list(mutations.META_PREFIX):
+        body = store.get(key)
+        if body:
+            records.append(MediaRecord.model_validate_json(body))
+
+    live = [r for r in records if not r.archived]
+    archived = [r for r in records if r.archived]
+    live.sort(key=MediaRecord.sort_key, reverse=True)
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "items": [r.model_dump(exclude_none=True) for r in live],
+        "archive": [dict(r.model_dump(exclude_none=True), storage_class="archived",
+                         playable=r.renderable) for r in archived],
+    }
 
 
-def save_archived(keys: set) -> None:
-    ARCHIVED_FILE.parent.mkdir(parents=True, exist_ok=True)
-    ARCHIVED_FILE.write_text(json.dumps(sorted(keys), ensure_ascii=False, indent=2))
+DEV_USER = "you@localhost"
 
 
-OVERRIDES_FILE = CACHE / "overrides.json"
+def _archive(payload: dict, who: str, at: str) -> dict:
+    changed, failed = mutations.apply_to_keys(
+        payload.get("keys") or [], partial(mutations.archive, state["store"], who=who, at=at))
+    return {"archived": changed, "failed": failed}
 
 
-def load_overrides() -> dict:
-    if OVERRIDES_FILE.exists():
-        return json.loads(OVERRIDES_FILE.read_text())
-    return {}
+def _category(payload: dict, who: str, at: str) -> dict:
+    changed, failed = mutations.apply_to_keys(
+        payload.get("keys") or [],
+        partial(mutations.recategorise, state["store"],
+                category=payload.get("category", ""), who=who, at=at))
+    return {"moved": changed, "failed": failed}
 
 
-def save_overrides(data: dict) -> None:
-    OVERRIDES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    OVERRIDES_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+def _rename(payload: dict, who: str, at: str) -> dict:
+    changed, failed = mutations.rename_category(
+        state["store"], (payload.get("from") or "").strip("/"),
+        (payload.get("to") or "").strip("/"), who=who, at=at)
+    return {"renamed": changed, "failed": failed}
 
 
-def split_manifest(manifest: dict) -> dict:
-    """Mirror what the real manifest builder does with archived items."""
-    archived = load_archived()
-    overrides = load_overrides()
-    items = [dict(i, category=overrides.get(i["key"], i["category"])) for i in manifest["all"]]
-    live = [i for i in items if i["key"] not in archived]
-    old = [dict(i, storage_class="archived") for i in items if i["key"] in archived]
-    return {"generated_at": manifest["generated_at"], "items": live, "archive": old}
+def _favourite(payload: dict, who: str, at: str) -> dict:
+    keys = mutations.set_favourites(
+        state["store"], who, payload.get("keys") or [], on=payload.get("on", True), at=at)
+    return {"favourites": keys}
+
+
+def _favourites(_payload: dict, who: str, _at: str) -> dict:
+    return {"favourites": mutations.load_favourites(state["store"], who)}
+
+
+ROUTES = {
+    "/api/archive": _archive,
+    "/api/category": _category,
+    "/api/rename-category": _rename,
+    "/api/favourite": _favourite,
+    "/api/favourites": _favourites,
+}
 
 
 def kind_for(path: Path) -> str:
@@ -104,11 +181,17 @@ def make_thumb(src: Path, dest: Path) -> bool:
     return result.returncode == 0 and dest.exists() and dest.stat().st_size > 0
 
 
+def _by_modified(item: dict) -> str:
+    return item["modified_at"]
+
+
 def build_manifest(source: Path) -> dict:
     items = []
     print(f"scanning {source} …")
     for path in sorted(p for p in source.rglob("*") if p.is_file()):
-        if path.suffix.lower() in SKIP or path.name == ".DS_Store" or path.stat().st_size == 0:
+        # Dotfiles are the uploader's own bookkeeping, not media.
+        if (path.suffix.lower() in SKIP or path.name.startswith(".")
+                or path.stat().st_size == 0):
             continue
         rel = path.relative_to(source)
         category = rel.parts[0] if len(rel.parts) > 1 else None
@@ -131,7 +214,7 @@ def build_manifest(source: Path) -> dict:
         })
         print(f"  {'thumb' if ok else 'no-thumb'}  {key}")
 
-    items.sort(key=lambda i: i["modified_at"], reverse=True)
+    items.sort(key=_by_modified, reverse=True)
     print(f"{len(items)} items\n")
     return {"generated_at": datetime.now(timezone.utc).isoformat(), "all": items}
 
@@ -177,9 +260,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         key = urllib.parse.unquote(self.path.lstrip("/").split("?")[0])
 
+        if key.startswith("api/") and self.do_GET_api("/" + key):
+            return
+
         if state["mode"] == "local":
             if key == "manifest.json":
-                body = json.dumps(split_manifest(state["manifest"]), ensure_ascii=False).encode()
+                body = json.dumps(local_manifest(), ensure_ascii=False).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
@@ -221,8 +307,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         key = urllib.parse.unquote(self.path.lstrip("/").split("?")[0])
-        if state["mode"] != "local" or key not in (
-            "api/archive", "api/category", "api/rename-category"):
+        route = "/" + key
+        if state["mode"] != "local" or route not in ROUTES:
             self.send_error(404)
             return
         length = int(self.headers.get("Content-Length") or 0)
@@ -231,33 +317,31 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except json.JSONDecodeError:
             self.send_error(400)
             return
-        keys = payload.get("keys") or []
 
-        if key == "api/rename-category":
-            old = (payload.get("from") or "").strip("/")
-            new = (payload.get("to") or "").strip("/")
-            overrides = load_overrides()
-            for item in state["manifest"]["all"]:
-                current = overrides.get(item["key"], item["category"]) or ""
-                if current == old or current.startswith(old + "/"):
-                    overrides[item["key"]] = new + current[len(old):]
-            save_overrides(overrides)
-            body = json.dumps({"renamed": len(overrides), "failed": {}}).encode()
-        elif key == "api/category":
-            category = (payload.get("category") or "").strip()
-            overrides = load_overrides()
-            for k in keys:
-                overrides[k] = category
-            save_overrides(overrides)
-            body = json.dumps({"moved": len(keys), "failed": {}}).encode()
+        at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        try:
+            result = ROUTES[route](payload, DEV_USER, at)
+        except Exception as exc:
+            body = json.dumps({"error": str(exc)}).encode()
+            self.send_response(400)
         else:
-            save_archived(load_archived() | set(keys))
-            body = json.dumps({"archived": len(keys), "failed": {}}).encode()
+            body = json.dumps(result).encode()
+            self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET_api(self, route: str) -> bool:
+        if state["mode"] != "local" or route not in ROUTES:
+            return False
+        body = json.dumps(ROUTES[route]({}, DEV_USER, "")).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+        return True
 
     def log_message(self, fmt, *args):
         print(f"  {fmt % args}")
@@ -272,7 +356,9 @@ def main() -> int:
     if args.local:
         state["mode"] = "local"
         state["source"] = args.local.resolve()
+        state["store"] = LocalStore(CACHE / "store")
         state["manifest"] = build_manifest(state["source"])
+        seed_sidecars()
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print(f"serving {SITE} on http://localhost:{args.port}")

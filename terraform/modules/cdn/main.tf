@@ -154,7 +154,7 @@ resource "aws_cloudfront_distribution" "gallery" {
   }
 
   dynamic "ordered_cache_behavior" {
-    for_each = ["/media/*", "/thumbs/*", "/archive/*", "/meta/*"]
+    for_each = ["/media/*", "/thumbs/*", "/archive/*", "/meta/*", "/favourites/*"]
     content {
       path_pattern           = ordered_cache_behavior.value
       target_origin_id       = local.s3_origin

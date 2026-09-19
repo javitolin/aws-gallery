@@ -19,3 +19,7 @@ class RenameRequest(BaseModel):
     # "from" is a keyword, so the wire name and the attribute differ.
     source: str = Field(alias="from", min_length=1)
     target: str = Field(alias="to", min_length=1, max_length=MAX_CATEGORY)
+
+
+class FavouriteRequest(KeysRequest):
+    on: bool = True

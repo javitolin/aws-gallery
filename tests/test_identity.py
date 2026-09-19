@@ -22,6 +22,7 @@ os.environ.setdefault("HMAC_PARAM", "/test/hmac")
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 
 handler = load("api_handler", "api", "handler.py")
+mutations = load("api_mutations", "api", "mutations.py")
 
 SECRET = b"a-test-secret"
 
@@ -74,10 +75,10 @@ class TagSanitising(unittest.TestCase):
     def test_hebrew_category_survives(self):
         # S3 allows Unicode letters in tag values; an ASCII-only filter would
         # have mangled these into underscores.
-        self.assertEqual(handler.TAG_SAFE.sub("_", "טיול משפחתי"), "טיול משפחתי")
+        self.assertEqual(mutations.TAG_SAFE.sub("_", "טיול משפחתי"), "טיול משפחתי")
 
     def test_disallowed_characters_are_replaced(self):
-        self.assertEqual(handler.TAG_SAFE.sub("_", "a,b;c"), "a_b_c")
+        self.assertEqual(mutations.TAG_SAFE.sub("_", "a,b;c"), "a_b_c")
 
 
 if __name__ == "__main__":

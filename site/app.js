@@ -1,5 +1,6 @@
 const MANIFEST = "manifest.json";
 const ARCHIVE = "__archive__";
+const FAVOURITES = "__favourites__";
 
 const el = (id) => document.getElementById(id);
 const timeline = el("timeline");
@@ -12,6 +13,8 @@ let activeFilter = "all";
 // Which parent's children are on show. null means the top level.
 let openParent = null;
 const selected = new Set();
+// Per user, so they come from the API rather than the shared manifest.
+let favourites = new Set();
 
 // S3 keys carry spaces and Hebrew; each segment is encoded separately so the
 // slashes survive. Assigning a raw key to src is what broke the old gallery.
@@ -71,6 +74,23 @@ function tile(item, index) {
     button.append(fallback);
   }
 
+  const heart = document.createElement("span");
+  heart.className = "fav" + (favourites.has(item.key) ? " on" : "");
+  heart.setAttribute("role", "button");
+  heart.tabIndex = 0;
+  heart.textContent = "♥";
+  heart.setAttribute("aria-label", `Favourite ${item.name}`);
+  const toggleFav = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setFavourite(item.key, !favourites.has(item.key), heart);
+  };
+  heart.addEventListener("click", toggleFav);
+  heart.addEventListener("keydown", (e) => {
+    if (e.key === " " || e.key === "Enter") toggleFav(e);
+  });
+  button.append(heart);
+
   if (item.kind !== "image") {
     const badge = document.createElement("span");
     badge.className = "badge" + (item.playable === false ? " badge-warn" : "");
@@ -123,6 +143,7 @@ function refreshSelectionUI() {
   el("selbar").hidden = !any;
   el("sel-count").textContent = `${selected.size} selected`;
   el("do-archive").disabled = !any;
+  el("do-fav").disabled = !any;
   el("do-move").disabled = !any || !el("cat-input").value.trim();
 }
 
@@ -174,7 +195,9 @@ function chip(label, value, count, extra = "") {
 }
 
 function renameableCategory() {
-  return activeFilter !== "all" && activeFilter !== ARCHIVE ? activeFilter : null;
+  const special = activeFilter === "all" || activeFilter === ARCHIVE
+    || activeFilter === FAVOURITES;
+  return special ? null : activeFilter;
 }
 
 function renamePencil() {
@@ -238,6 +261,9 @@ function renderChips() {
     appendChip(bar, chip(leafOf(branch) + (hasKids ? " ›" : ""), branch, count), branch);
   }
 
+  if (!openParent && favourites.size) {
+    bar.append(chip("♥ Favourites", FAVOURITES, favourites.size, "chip-fav"));
+  }
   if (!openParent && archivedItems.length) {
     bar.append(chip("Archive", ARCHIVE, archivedItems.length, "chip-archive"));
   }
@@ -247,6 +273,8 @@ function renderChips() {
 function applyFilter() {
   if (activeFilter === ARCHIVE) {
     shown = archivedItems;
+  } else if (activeFilter === FAVOURITES) {
+    shown = allItems.filter((i) => favourites.has(i.key));
   } else if (activeFilter === "all") {
     shown = allItems;
   } else {
@@ -333,6 +361,43 @@ async function post(path, payload, button, busyLabel) {
   } finally {
     button.textContent = label;
     button.disabled = false;
+  }
+}
+
+async function setFavourite(key, on, node) {
+  node.classList.toggle("on", on);
+  try {
+    const response = await fetch("/api/favourite", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ keys: [key], on }),
+    });
+    if (!response.ok) throw new Error(`failed (${response.status})`);
+    favourites = new Set((await response.json()).favourites || []);
+    renderChips();
+  } catch (err) {
+    node.classList.toggle("on", !on);
+    status.hidden = false;
+    status.textContent = `Could not update favourite: ${err.message}`;
+  }
+}
+
+async function favouriteSelected() {
+  const keys = [...selected];
+  if (await post("/api/favourite", { keys, on: true }, el("do-fav"), "Saving…")) {
+    cancelSelect();
+    await loadFavourites();
+    renderChips();
+    applyFilter();
+  }
+}
+
+async function loadFavourites() {
+  try {
+    const response = await fetch("/api/favourites", { cache: "no-store" });
+    if (response.ok) favourites = new Set((await response.json()).favourites || []);
+  } catch {
+    favourites = new Set();
   }
 }
 
@@ -480,6 +545,7 @@ lightbox.addEventListener("touchend", (e) => {
 el("sel-cancel").addEventListener("click", cancelSelect);
 el("do-archive").addEventListener("click", archiveSelected);
 el("do-move").addEventListener("click", moveSelected);
+el("do-fav").addEventListener("click", favouriteSelected);
 el("cat-input").addEventListener("input", refreshSelectionUI);
 el("cat-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !el("do-move").disabled) moveSelected();
@@ -494,6 +560,7 @@ async function load() {
     if (!response.ok) throw new Error(`manifest returned ${response.status}`);
     const manifest = await response.json();
 
+    await loadFavourites();
     allItems = (manifest.items || []).filter((i) => i.renderable !== false);
     archivedItems = manifest.archive || [];
 

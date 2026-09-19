@@ -272,6 +272,28 @@ h2.month:first-of-type { margin-top: 0; }
 .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-primary:not(:disabled):hover { filter: brightness(1.08); }
 
+.fav {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  z-index: 2;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #ffffff5c;
+  background: #0d0d0f66;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+.tile:hover .fav, .tile:focus-within .fav, .fav.on { opacity: 1; }
+.fav:hover { color: #ff6b81; }
+.fav.on { color: #ff4d67; }
+@media (hover: none) { .fav { opacity: 1; } }
+
+.chip-fav.on { background: #ff4d67; border-color: #ff4d67; color: #0d0d0f; }
+
 .pick {
   position: absolute;
   top: 6px;
@@ -294,16 +316,104 @@ h2.month:first-of-type { margin-top: 0; }
 /* Reveal on hover, whenever a selection is in progress, or on touch. */
 .tile:hover .pick,
 .tile:focus-within .pick,
-body.selecting .pick { opacity: 1; }
+body.selecting .fav {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  z-index: 2;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #ffffff5c;
+  background: #0d0d0f66;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+.tile:hover .fav, .tile:focus-within .fav, .fav.on { opacity: 1; }
+.fav:hover { color: #ff6b81; }
+.fav.on { color: #ff4d67; }
+@media (hover: none) { .fav { opacity: 1; } }
+
+.chip-fav.on { background: #ff4d67; border-color: #ff4d67; color: #0d0d0f; }
+
+.pick { opacity: 1; }
 .pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 @media (hover: none) {
-  .pick { opacity: 1; }
+  .fav {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  z-index: 2;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #ffffff5c;
+  background: #0d0d0f66;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+.tile:hover .fav, .tile:focus-within .fav, .fav.on { opacity: 1; }
+.fav:hover { color: #ff6b81; }
+.fav.on { color: #ff4d67; }
+@media (hover: none) { .fav { opacity: 1; } }
+
+.chip-fav.on { background: #ff4d67; border-color: #ff4d67; color: #0d0d0f; }
+
+.pick { opacity: 1; }
 }
 
-body.no-select .pick { display: none; }
+body.no-select .fav {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  z-index: 2;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #ffffff5c;
+  background: #0d0d0f66;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+.tile:hover .fav, .tile:focus-within .fav, .fav.on { opacity: 1; }
+.fav:hover { color: #ff6b81; }
+.fav.on { color: #ff4d67; }
+@media (hover: none) { .fav { opacity: 1; } }
 
-.tile.picked .pick {
+.chip-fav.on { background: #ff4d67; border-color: #ff4d67; color: #0d0d0f; }
+
+.pick { display: none; }
+
+.tile.picked .fav {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  z-index: 2;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #ffffff5c;
+  background: #0d0d0f66;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+.tile:hover .fav, .tile:focus-within .fav, .fav.on { opacity: 1; }
+.fav:hover { color: #ff6b81; }
+.fav.on { color: #ff4d67; }
+@media (hover: none) { .fav { opacity: 1; } }
+
+.chip-fav.on { background: #ff4d67; border-color: #ff4d67; color: #0d0d0f; }
+
+.pick {
   opacity: 1;
   background: var(--accent);
   border-color: var(--accent);

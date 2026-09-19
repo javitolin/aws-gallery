@@ -165,6 +165,14 @@ data "archive_file" "api" {
     content  = file("${var.api_source_dir}/schemas.py")
     filename = "schemas.py"
   }
+  source {
+    content  = file("${var.api_source_dir}/store.py")
+    filename = "store.py"
+  }
+  source {
+    content  = file("${var.api_source_dir}/mutations.py")
+    filename = "mutations.py"
+  }
 }
 
 resource "aws_iam_role" "api" {

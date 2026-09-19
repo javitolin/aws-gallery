@@ -64,7 +64,8 @@ def sha16(path: Path) -> str:
 
 def classify(rel: str, path: Path) -> tuple[str | None, str | None]:
     ext = path.suffix.lower()
-    if ext in SKIP_EXT or path.name == ".DS_Store":
+    # Dotfiles are bookkeeping (the checkpoint, .DS_Store), never media.
+    if ext in SKIP_EXT or path.name.startswith("."):
         return None, "regenerable sidecar"
     if ext in NEEDS_TRANSCODE:
         return None, "needs transcoding first — run scripts/transcode.py"

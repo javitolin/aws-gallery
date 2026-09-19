@@ -90,3 +90,25 @@ class RebuildContract(unittest.TestCase):
         self.assertEqual(len(manifest.items), 1)
         with self.assertRaises(TypeError):
             manifest["items"]
+
+
+class Favourites(unittest.TestCase):
+    """Favourites are per user, so they live in their own object and never
+    enter the shared manifest — otherwise one person's hearts would show to
+    everyone and the manifest would stop being identical for all viewers."""
+
+    def test_each_user_gets_their_own_object(self):
+        import mutations
+        mine = mutations.favourites_key("a@example.com")
+        theirs = mutations.favourites_key("b@example.com")
+        self.assertNotEqual(mine, theirs)
+        self.assertTrue(mine.startswith("favourites/"))
+
+    def test_the_key_does_not_leak_the_email(self):
+        import mutations
+        self.assertNotIn("a@example.com", mutations.favourites_key("a@example.com"))
+
+    def test_favourite_request_defaults_to_on(self):
+        from schemas import FavouriteRequest
+        self.assertTrue(FavouriteRequest(keys=["media/a.jpg"]).on)
+        self.assertFalse(FavouriteRequest(keys=["media/a.jpg"], on=False).on)

@@ -22,6 +22,7 @@ import os
 import subprocess
 import sys
 import time
+import urllib.parse
 from pathlib import Path
 
 import boto3
@@ -247,7 +248,9 @@ def main():
         if prefix == ARCHIVE_PREFIX:
             extra["StorageClass"] = "GLACIER_IR"
         if category:
-            extra["Tagging"] = f"category={category}"
+            # Tagging on PutObject is a URL-encoded query string, not a literal.
+            # Passing a Hebrew or spaced category raw yields InvalidTag.
+            extra["Tagging"] = urllib.parse.urlencode({"category": category})
 
         if prefix == MEDIA_PREFIX:
             write_sidecar(s3, key, rel, path, category)

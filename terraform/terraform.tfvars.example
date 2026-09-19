@@ -1,0 +1,7 @@
+bucket_name           = "my-gallery-bucket"
+domain_name           = "photos.example.com"
+cognito_domain_prefix = "my-gallery"
+
+# Set while an old distribution still needs bucket read during a migration,
+# then clear it.
+legacy_distribution_arn = ""

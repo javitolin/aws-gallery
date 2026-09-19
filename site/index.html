@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>Gallery</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="bar">
+  <h1>Gallery</h1>
+  <div class="bar-actions">
+    <span id="count" class="count"></span>
+    <a class="btn" href="/auth/logout">Sign out</a>
+  </div>
+</header>
+
+<main id="main">
+  <nav id="filters" class="filters" hidden aria-label="Categories"></nav>
+  <p id="status" class="status">Loading…</p>
+  <div id="timeline"></div>
+</main>
+
+<div id="selbar" class="selbar" hidden>
+  <span id="sel-count" class="count">0 selected</span>
+  <div class="selbar-actions">
+    <input id="cat-input" class="cat-input" list="cat-list" placeholder="Move to category…"
+           aria-label="Move to category" maxlength="60">
+    <datalist id="cat-list"></datalist>
+    <button id="do-move" class="btn" type="button" disabled>Move</button>
+    <button id="do-archive" class="btn btn-primary" type="button" disabled>Archive</button>
+    <button id="sel-cancel" class="btn" type="button">Cancel</button>
+  </div>
+</div>
+
+<dialog id="rename-dialog" class="dialog">
+  <form method="dialog" id="rename-form">
+    <h2 id="rename-title">Rename category</h2>
+    <p class="dialog-note" id="rename-note"></p>
+    <input id="rename-input" class="cat-input dialog-input" maxlength="120"
+           aria-label="New category name" required>
+    <div class="dialog-actions">
+      <button value="cancel" class="btn" type="submit" formnovalidate>Cancel</button>
+      <button id="rename-go" value="ok" class="btn btn-primary" type="submit">Rename</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="lightbox" class="lightbox" hidden>
+  <button class="lb-close" aria-label="Close">×</button>
+  <button class="lb-nav lb-prev" aria-label="Previous">‹</button>
+  <button class="lb-nav lb-next" aria-label="Next">›</button>
+  <figure class="lb-stage"><div id="lb-content"></div><figcaption id="lb-caption"></figcaption></figure>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

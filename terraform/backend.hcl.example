@@ -1,0 +1,3 @@
+bucket = "my-terraform-state-bucket"   # NOT the media bucket
+key    = "tfstate/gallery.tfstate"
+region = "us-east-1"

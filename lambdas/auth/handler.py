@@ -11,7 +11,7 @@ import urllib.request
 import boto3
 import jwt
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 COGNITO_DOMAIN = os.environ["COGNITO_DOMAIN"]
 CLIENT_ID = os.environ["CLIENT_ID"]
@@ -31,7 +31,7 @@ _jwks_client = None
 _hmac_key = None
 
 
-def _key():
+def _key() -> rsa.RSAPrivateKey:
     global _private_key
     if _private_key is None:
         pem = boto3.client("ssm").get_parameter(
@@ -57,7 +57,7 @@ def identity_cookie(email: str, expires: int) -> str:
     return f"{payload}|{digest}"
 
 
-def _jwks():
+def _jwks() -> jwt.PyJWKClient:
     global _jwks_client
     if _jwks_client is None:
         _jwks_client = jwt.PyJWKClient(f"{ISSUER}/.well-known/jwks.json")
@@ -90,7 +90,7 @@ def _signed_cookies(expires: int) -> dict:
     }
 
 
-def _cookie(name, value, max_age, http_only=True):
+def _cookie(name: str, value: str, max_age: int, http_only: bool = True) -> str:
     parts = [f"{name}={value}", "Path=/", "Secure", "SameSite=Lax", f"Max-Age={max_age}"]
     if http_only:
         parts.insert(2, "HttpOnly")
@@ -105,7 +105,7 @@ def _parse_cookies(event) -> dict:
     return out
 
 
-def _redirect(location, cookies=None):
+def _redirect(location: str, cookies: list[str] | None = None) -> dict:
     return {
         "statusCode": 302,
         "headers": {"location": location, "cache-control": "no-store"},
@@ -113,7 +113,7 @@ def _redirect(location, cookies=None):
     }
 
 
-def _error(code, message):
+def _error(code: int, message: str) -> dict:
     return {
         "statusCode": code,
         "headers": {"content-type": "text/html; charset=utf-8", "cache-control": "no-store"},
@@ -124,7 +124,7 @@ def _error(code, message):
     }
 
 
-def _login(event):
+def _login(event: dict) -> dict:
     verifier = secrets.token_urlsafe(64)
     challenge = (
         base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
@@ -157,7 +157,7 @@ def _login(event):
     )
 
 
-def _callback(event):
+def _callback(event: dict) -> dict:
     query = event.get("queryStringParameters") or {}
     cookies = _parse_cookies(event)
 
@@ -220,7 +220,7 @@ def _callback(event):
     return _redirect(urllib.parse.unquote(cookies.get("next", "/")), session)
 
 
-def _logout(_event):
+def _logout(_event: dict) -> dict:
     cleared = [
         _cookie(name, "", 0)
         for name in (
@@ -240,7 +240,7 @@ def _logout(_event):
 ROUTES = {"/auth/login": _login, "/auth/callback": _callback, "/auth/logout": _logout}
 
 
-def lambda_handler(event, _context):
+def lambda_handler(event: dict, _context: object) -> dict:
     path = event.get("requestContext", {}).get("http", {}).get("path", "")
     handler = ROUTES.get(path.rstrip("/") or path)
     if handler is None:

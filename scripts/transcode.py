@@ -62,14 +62,14 @@ def video_codec(path: Path) -> str:
     return result.stdout.decode().strip().rstrip(",")
 
 
-def run(cmd) -> bool:
+def run(cmd: list[str]) -> bool:
     result = subprocess.run(cmd, capture_output=True)
     if result.returncode != 0:
         sys.stderr.write(result.stderr.decode()[-500:] + "\n")
     return result.returncode == 0
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--source", type=Path, default=SOURCE)

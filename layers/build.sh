@@ -47,6 +47,7 @@ chmod +x "$BUILD/ffmpeg-layer/bin/"*
 echo "    $(du -h "$ROOT/ffmpeg.zip" | cut -f1)"
 
 wheels pyimaging Pillow
+wheels models pydantic
 wheels authdeps cryptography PyJWT
 
 echo "==> done: $(ls "$ROOT"/*.zip | xargs -n1 basename | tr '\n' ' ')"

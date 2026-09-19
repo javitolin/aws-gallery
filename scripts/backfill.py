@@ -10,6 +10,7 @@ import json
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from typing import Iterator
 
 import boto3
 
@@ -19,14 +20,14 @@ MEDIA_PREFIX = "media/"
 THUMB_PREFIX = "thumbs/"
 
 
-def listing(s3, prefix):
+def listing(s3: object, prefix: str) -> Iterator[str]:
     for page in s3.get_paginator("list_objects_v2").paginate(Bucket=BUCKET, Prefix=prefix):
         for obj in page.get("Contents", []):
             if not obj["Key"].endswith("/"):
                 yield obj["Key"]
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--all", action="store_true", help="replay everything, not just gaps")
     parser.add_argument("--apply", action="store_true")
@@ -51,7 +52,7 @@ def main():
     awslambda = boto3.client("lambda")
     done = [0]
 
-    def replay(key):
+    def replay(key: str) -> None:
         # Async: the processor writes thumb, sidecar and manifest on its own.
         awslambda.invoke(
             FunctionName=FUNCTION,

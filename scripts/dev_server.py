@@ -40,7 +40,7 @@ state = {"mode": "s3", "source": None, "manifest": None}
 ARCHIVED_FILE = CACHE / "archived.json"
 
 
-def load_archived() -> set:
+def load_archived() -> set[str]:
     if ARCHIVED_FILE.exists():
         return set(json.loads(ARCHIVED_FILE.read_text()))
     return set()
@@ -199,7 +199,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(404)
                 return
         elif key.startswith(S3_PREFIXES):
-            import boto3
             url = boto3.client("s3").generate_presigned_url(
                 "get_object", Params={"Bucket": BUCKET, "Key": key}, ExpiresIn=3600)
             self.send_response(302)
@@ -264,7 +263,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         print(f"  {fmt % args}")
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--local", type=Path, help="preview a local directory instead of S3")

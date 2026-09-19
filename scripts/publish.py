@@ -62,7 +62,7 @@ def sha16(path: Path) -> str:
     return digest.hexdigest()[:16]
 
 
-def classify(rel: str, path: Path):
+def classify(rel: str, path: Path) -> tuple[str | None, str | None]:
     ext = path.suffix.lower()
     if ext in SKIP_EXT or path.name == ".DS_Store":
         return None, "regenerable sidecar"
@@ -77,20 +77,20 @@ def category_of(rel: str) -> str | None:
     return None if parent == "." else parent
 
 
-def load_checkpoint():
+def load_checkpoint() -> dict:
     if CHECKPOINT.exists():
         return json.loads(CHECKPOINT.read_text())
     return {"uploaded": {}, "hashes": {}, "started": None}
 
 
-def save_checkpoint(state):
+def save_checkpoint(state: dict) -> None:
     state["updated"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     tmp = CHECKPOINT.with_suffix(".tmp")
     tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False))
     tmp.replace(CHECKPOINT)
 
 
-def cached_hash(state, rel: str, path: Path) -> str:
+def cached_hash(state: dict, rel: str, path: Path) -> str:
     """Re-hashing 95GB on every run would make this unusable."""
     stat = path.stat()
     fingerprint = f"{stat.st_size}:{int(stat.st_mtime)}"
@@ -102,7 +102,7 @@ def cached_hash(state, rel: str, path: Path) -> str:
     return sha
 
 
-def already_in_s3(s3, key, size):
+def already_in_s3(s3: object, key: str, size: int) -> bool:
     try:
         return s3.head_object(Bucket=BUCKET, Key=key)["ContentLength"] == size
     except ClientError as exc:
@@ -152,7 +152,7 @@ def write_sidecar(s3, key: str, rel: str, path: Path, category: str | None) -> N
     )
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true", help="actually upload")
     parser.add_argument("--source", type=Path, default=SOURCE)

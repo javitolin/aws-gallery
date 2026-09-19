@@ -14,6 +14,15 @@ resource "aws_lambda_layer_version" "ffmpeg" {
   description              = "static ffmpeg + ffprobe at /opt/bin"
 }
 
+resource "aws_lambda_layer_version" "models" {
+  layer_name               = "gallery-models"
+  filename                 = "${var.layers_dir}/models.zip"
+  source_code_hash         = filebase64sha256("${var.layers_dir}/models.zip")
+  compatible_runtimes      = ["python3.13"]
+  compatible_architectures = ["arm64"]
+  description              = "pydantic, shared by the processor and the write API"
+}
+
 resource "aws_lambda_layer_version" "imaging" {
   layer_name               = "gallery-imaging"
   filename                 = "${var.layers_dir}/pyimaging.zip"
@@ -91,7 +100,11 @@ resource "aws_lambda_function" "processor" {
   architectures    = ["arm64"]
   memory_size      = 2048
   timeout          = 300
-  layers           = [aws_lambda_layer_version.ffmpeg.arn, aws_lambda_layer_version.imaging.arn]
+  layers = [
+    aws_lambda_layer_version.ffmpeg.arn,
+    aws_lambda_layer_version.imaging.arn,
+    aws_lambda_layer_version.models.arn,
+  ]
 
   # No reserved concurrency: the handler no longer rebuilds the manifest per
   # object, so a bulk upload is linear and needs no cap. Capping it throttled
@@ -143,6 +156,14 @@ data "archive_file" "api" {
   source {
     content  = file("${var.source_dir}/media_kinds.py")
     filename = "media_kinds.py"
+  }
+  source {
+    content  = file("${var.source_dir}/models.py")
+    filename = "models.py"
+  }
+  source {
+    content  = file("${var.api_source_dir}/schemas.py")
+    filename = "schemas.py"
   }
 }
 
@@ -204,8 +225,10 @@ resource "aws_lambda_function" "api" {
   handler          = "handler.lambda_handler"
   runtime          = "python3.13"
   architectures    = ["arm64"]
-  memory_size      = 512
-  timeout          = 60
+  memory_size      = 1024
+  # Renaming a category touches every sidecar, so this is a bulk operation.
+  timeout = 300
+  layers  = [aws_lambda_layer_version.models.arn]
 
   environment {
     variables = {

@@ -7,6 +7,7 @@ import boto3
 
 import manifest
 import thumbnail
+from models import MediaRecord
 
 BUCKET = os.environ["BUCKET"]
 MEDIA_PREFIX = os.environ.get("MEDIA_PREFIX", "media/")
@@ -40,25 +41,22 @@ STICKY_FIELDS = ("name", "source_path", "category",
                  "category_by", "category_at")
 
 
-def _preserve_manual(key: str, record: dict) -> dict:
+def _preserve_manual(record: MediaRecord) -> MediaRecord:
     try:
-        previous = json.loads(
-            s3.get_object(Bucket=BUCKET, Key=_sidecar(key))["Body"].read()
-        )
+        body = s3.get_object(Bucket=BUCKET, Key=_sidecar(record.key))["Body"].read()
+        previous = MediaRecord.model_validate_json(body)
     except Exception:
         return record
-    for field in STICKY_FIELDS:
-        if field in previous:
-            record[field] = previous[field]
-    return record
+    return record.model_copy(
+        update={field: getattr(previous, field) for field in STICKY_FIELDS}
+    )
 
 
-def _write_meta(record: dict) -> None:
-    record = _preserve_manual(record["key"], record)
+def _write_meta(record: MediaRecord) -> None:
     s3.put_object(
         Bucket=BUCKET,
-        Key=_sidecar(record["key"]),
-        Body=json.dumps(record, ensure_ascii=False).encode("utf-8"),
+        Key=_sidecar(record.key),
+        Body=_preserve_manual(record).to_json(),
         ContentType="application/json; charset=utf-8",
     )
 
@@ -66,25 +64,22 @@ def _write_meta(record: dict) -> None:
 def _process(key: str) -> None:
     head = s3.head_object(Bucket=BUCKET, Key=key)
     kind = thumbnail.kind_for(key)  # extension survives in the hashed key
-    record = {
-        "key": key,
+    record = MediaRecord(
+        key=key,
         # Overridden by the uploader's sidecar; the key is only a hash.
-        "name": os.path.basename(key),
-        "kind": kind,
-        "size": head["ContentLength"],
-        "modified_at": head["LastModified"].isoformat(),
-        "renderable": False,
-    }
+        name=os.path.basename(key),
+        kind=kind,
+        size=head["ContentLength"],
+        modified_at=head["LastModified"].isoformat(),
+    )
 
     extractor = EXTRACTORS.get(kind)
     if extractor is None:
-        record["reason"] = f"unsupported format: {os.path.splitext(key)[1] or 'none'}"
-        _write_meta(record)
-        return
+        record.reason = f"unsupported format: {os.path.splitext(key)[1] or 'none'}"
+        return _write_meta(record)
     if head["ContentLength"] > thumbnail.MAX_TRANSCODE_BYTES:
-        record["reason"] = "file too large to thumbnail"
-        _write_meta(record)
-        return
+        record.reason = "file too large to thumbnail"
+        return _write_meta(record)
 
     with tempfile.NamedTemporaryFile(suffix=os.path.splitext(key)[1]) as local:
         s3.download_fileobj(BUCKET, key, local)
@@ -92,11 +87,12 @@ def _process(key: str) -> None:
         try:
             thumb, meta = extractor(local.name)
         except Exception as exc:
-            record["reason"] = f"{type(exc).__name__}: {exc}"
-            _write_meta(record)
-            return
+            record.reason = f"{type(exc).__name__}: {exc}"
+            return _write_meta(record)
 
-    record.update({k: v for k, v in meta.items() if v is not None})
+    for field, value in meta.items():
+        if value is not None:
+            setattr(record, field, value)
 
     if thumb:
         s3.put_object(
@@ -106,16 +102,13 @@ def _process(key: str) -> None:
             ContentType="image/webp",
             CacheControl="public, max-age=31536000, immutable",
         )
-        record["thumb"] = _thumb(key)
-    elif kind == "audio":
+        record.thumb = _thumb(key)
+    elif kind != "audio":
         # No cover art is normal for audio; the UI draws its own tile.
-        record["thumb"] = None
-    else:
-        record["reason"] = "thumbnail extraction produced no frame"
-        _write_meta(record)
-        return
+        record.reason = "thumbnail extraction produced no frame"
+        return _write_meta(record)
 
-    record["renderable"] = True
+    record.renderable = True
     _write_meta(record)
 
 
@@ -126,7 +119,7 @@ def _remove(key: str) -> None:
     )
 
 
-def lambda_handler(event, _context):
+def lambda_handler(event: dict, _context: object) -> dict:
     """Per-object work only, unless asked to rebuild.
 
     Rebuilding the manifest reads every sidecar, so doing it per object made a
@@ -152,5 +145,5 @@ def lambda_handler(event, _context):
     if rebuild_only or removed:
         result = manifest.rebuild(BUCKET, META_PREFIX, ARCHIVE_PREFIX, MANIFEST_KEY)
         return {"touched": touched, "removed": removed,
-                "items": len(result["items"]), "rebuilt": True}
+                "items": len(result.items), "rebuilt": True}
     return {"touched": touched, "rebuilt": False}

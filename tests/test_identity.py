@@ -12,8 +12,9 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "..", "lambdas", "media_processor"))
+for package in ("media_processor", "api"):
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "..", "lambdas", package))
 from loader import load  # noqa: E402
 
 os.environ.setdefault("BUCKET", "test-bucket")

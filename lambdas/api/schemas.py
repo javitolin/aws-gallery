@@ -23,3 +23,10 @@ class RenameRequest(BaseModel):
 
 class FavouriteRequest(KeysRequest):
     on: bool = True
+
+
+class HideRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    categories: list[str] = Field(min_length=1)
+    on: bool = True

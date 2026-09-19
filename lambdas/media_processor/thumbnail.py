@@ -9,12 +9,20 @@ from PIL import Image, ImageOps
 FFMPEG = "/opt/bin/ffmpeg"
 FFPROBE = "/opt/bin/ffprobe"
 
+# Cameras without a real-time clock write epoch-relative stamps. A 1970 date is
+# worse than none: it buries the item at the end of the timeline.
+EARLIEST_PLAUSIBLE = "1990"
+
 THUMB_EDGE = 512
 THUMB_QUALITY = 80
 # Poster extraction streams the whole file through ffmpeg, so cap what we pull into /tmp.
 MAX_TRANSCODE_BYTES = 4_500_000_000
 
 from media_kinds import kind_for  # noqa: F401  (re-exported for the processor)
+
+
+def plausible(stamp: str | None) -> str | None:
+    return stamp if stamp and stamp >= EARLIEST_PLAUSIBLE else None
 
 
 def _probe(path: str) -> dict:
@@ -48,7 +56,7 @@ def _exif_taken(image: Image.Image):
         if value:
             try:
                 date, clock = str(value).split(" ")
-                return f"{date.replace(':', '-')}T{clock}Z"
+                return plausible(f"{date.replace(':', '-')}T{clock}Z")
             except ValueError:
                 continue
     return None
@@ -69,7 +77,7 @@ def from_video(path: str) -> tuple[bytes | None, dict]:
         "width": stream.get("width"),
         "height": stream.get("height"),
         "duration": float(probe.get("format", {}).get("duration", 0)) or None,
-        "taken_at": probe.get("format", {}).get("tags", {}).get("creation_time"),
+        "taken_at": plausible(probe.get("format", {}).get("tags", {}).get("creation_time")),
     }
 
     with tempfile.NamedTemporaryFile(suffix=".jpg") as frame:
@@ -90,7 +98,7 @@ def from_audio(path: str) -> tuple[bytes | None, dict]:
     tags = probe.get("format", {}).get("tags", {})
     meta = {
         "duration": float(probe.get("format", {}).get("duration", 0)) or None,
-        "taken_at": tags.get("creation_time") or tags.get("date"),
+        "taken_at": plausible(tags.get("creation_time") or tags.get("date")),
         "title": tags.get("title"),
         "artist": tags.get("artist"),
     }

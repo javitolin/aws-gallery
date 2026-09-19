@@ -99,16 +99,47 @@ class Favourites(unittest.TestCase):
 
     def test_each_user_gets_their_own_object(self):
         import mutations
-        mine = mutations.favourites_key("a@example.com")
-        theirs = mutations.favourites_key("b@example.com")
+        mine = mutations.prefs_key("a@example.com")
+        theirs = mutations.prefs_key("b@example.com")
         self.assertNotEqual(mine, theirs)
-        self.assertTrue(mine.startswith("favourites/"))
+        self.assertTrue(mine.startswith("prefs/"))
 
     def test_the_key_does_not_leak_the_email(self):
         import mutations
-        self.assertNotIn("a@example.com", mutations.favourites_key("a@example.com"))
+        self.assertNotIn("a@example.com", mutations.prefs_key("a@example.com"))
 
     def test_favourite_request_defaults_to_on(self):
         from schemas import FavouriteRequest
         self.assertTrue(FavouriteRequest(keys=["media/a.jpg"]).on)
         self.assertFalse(FavouriteRequest(keys=["media/a.jpg"], on=False).on)
+
+
+class Dates(unittest.TestCase):
+    def test_filename_dates_are_recovered(self):
+        import filename_dates
+        self.assertEqual(filename_dates.from_name("PXL_20220928_154721228.mp4"),
+                         "2022-09-28T00:00:00Z")
+        self.assertEqual(filename_dates.from_name("2017-03-25 20.37.10.jpg"),
+                         "2017-03-25T00:00:00Z")
+
+    def test_a_name_with_no_date_yields_nothing(self):
+        import filename_dates
+        self.assertIsNone(filename_dates.from_name("GOPR0137.mp4"))
+        self.assertIsNone(filename_dates.from_name("YDXJ0998.MP4"))
+
+    def test_implausible_dates_are_refused(self):
+        # A camera without a clock writes 1970, which would bury the item.
+        import filename_dates
+        self.assertIsNone(filename_dates.from_name("1970-01-01 00.33.37.mp4"))
+
+    def test_sort_key_prefers_source_mtime_over_upload_time(self):
+        record = MediaRecord(key="k", name="n", source_mtime="2017", modified_at="2026")
+        self.assertEqual(record.sort_key(), "2017")
+
+
+class Hiding(unittest.TestCase):
+    def test_hide_request_needs_a_category(self):
+        from schemas import HideRequest
+        with self.assertRaises(ValidationError):
+            HideRequest(categories=[])
+        self.assertTrue(HideRequest(categories=["Ofer Trip"]).on)

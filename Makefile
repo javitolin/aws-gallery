@@ -8,7 +8,7 @@ endif
 
 VENV := .venv/bin
 
-.PHONY: help venv layers test dev plan apply site backfill publish publish-check transcode rebuild add-user reset-password cert-status outputs
+.PHONY: help venv layers test dev plan apply site backfill publish publish-check transcode rebuild refresh add-user reset-password cert-status outputs
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
@@ -50,6 +50,9 @@ reset-password: ## reset a user's password: make reset-password EMAIL=them@examp
 	 aws cognito-idp admin-set-user-password --user-pool-id $$pool --username "$(EMAIL)" --password "$$pw" && \
 	 echo "" && echo "  user:     $(EMAIL)" && echo "  password: $$pw" && \
 	 echo "  must be changed at next sign-in. Any passkey already registered still works."
+
+refresh: ## re-derive dates and categories for everything already uploaded
+	$(VENV)/python scripts/publish.py --apply --no-prepare --refresh
 
 rebuild: ## rebuild manifest.json from the sidecars
 	@aws lambda invoke --function-name gallery-media-processor \

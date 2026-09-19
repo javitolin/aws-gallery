@@ -292,6 +292,14 @@ h2.month:first-of-type { margin-top: 0; }
 .fav.on { color: #ff4d67; }
 @media (hover: none) { .fav { opacity: 1; } }
 
+.chip-hidden {
+  opacity: 0.45;
+  text-decoration: line-through;
+  text-decoration-color: #ffffff5c;
+}
+.chip-hidden:hover { opacity: 0.85; text-decoration: none; }
+.chip-hidden .chip-n { text-decoration: none; display: inline-block; }
+
 .chip-fav.on { background: #ff4d67; border-color: #ff4d67; color: #0d0d0f; }
 
 .pick {
@@ -336,6 +344,14 @@ body.selecting .fav {
 .fav.on { color: #ff4d67; }
 @media (hover: none) { .fav { opacity: 1; } }
 
+.chip-hidden {
+  opacity: 0.45;
+  text-decoration: line-through;
+  text-decoration-color: #ffffff5c;
+}
+.chip-hidden:hover { opacity: 0.85; text-decoration: none; }
+.chip-hidden .chip-n { text-decoration: none; display: inline-block; }
+
 .chip-fav.on { background: #ff4d67; border-color: #ff4d67; color: #0d0d0f; }
 
 .pick { opacity: 1; }
@@ -362,6 +378,14 @@ body.selecting .fav {
 .fav.on { color: #ff4d67; }
 @media (hover: none) { .fav { opacity: 1; } }
 
+.chip-hidden {
+  opacity: 0.45;
+  text-decoration: line-through;
+  text-decoration-color: #ffffff5c;
+}
+.chip-hidden:hover { opacity: 0.85; text-decoration: none; }
+.chip-hidden .chip-n { text-decoration: none; display: inline-block; }
+
 .chip-fav.on { background: #ff4d67; border-color: #ff4d67; color: #0d0d0f; }
 
 .pick { opacity: 1; }
@@ -387,6 +411,14 @@ body.no-select .fav {
 .fav.on { color: #ff4d67; }
 @media (hover: none) { .fav { opacity: 1; } }
 
+.chip-hidden {
+  opacity: 0.45;
+  text-decoration: line-through;
+  text-decoration-color: #ffffff5c;
+}
+.chip-hidden:hover { opacity: 0.85; text-decoration: none; }
+.chip-hidden .chip-n { text-decoration: none; display: inline-block; }
+
 .chip-fav.on { background: #ff4d67; border-color: #ff4d67; color: #0d0d0f; }
 
 .pick { display: none; }
@@ -410,6 +442,14 @@ body.no-select .fav {
 .fav:hover { color: #ff6b81; }
 .fav.on { color: #ff4d67; }
 @media (hover: none) { .fav { opacity: 1; } }
+
+.chip-hidden {
+  opacity: 0.45;
+  text-decoration: line-through;
+  text-decoration-color: #ffffff5c;
+}
+.chip-hidden:hover { opacity: 0.85; text-decoration: none; }
+.chip-hidden .chip-n { text-decoration: none; display: inline-block; }
 
 .chip-fav.on { background: #ff4d67; border-color: #ff4d67; color: #0d0d0f; }
 

@@ -148,9 +148,13 @@ def main() -> int:
         if action == "remux":
             # Container rewrite only; the streams are copied bit for bit.
             ok = run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(src),
+                      # Without this the container rewrite drops creation_time.
+                      "-map_metadata", "0",
                       "-c", "copy", "-movflags", "+faststart", str(dest)])
         else:
             ok = run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(src),
+                      # Re-encoding discards metadata unless it is mapped over.
+                      "-map_metadata", "0",
                       "-c:v", "h264_videotoolbox", "-b:v", VIDEO_BITRATE,
                       # Only touches frames actually flagged interlaced.
                       "-vf", "yadif=deint=interlaced",

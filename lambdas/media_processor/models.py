@@ -24,6 +24,7 @@ class MediaRecord(BaseModel):
     category: str | None = None
 
     modified_at: str | None = None
+    source_mtime: str | None = None
     taken_at: str | None = None
     width: int | None = None
     height: int | None = None
@@ -42,8 +43,9 @@ class MediaRecord(BaseModel):
     category_at: str | None = None
 
     def sort_key(self) -> str:
-        """Newest first in the timeline, falling back to when it was uploaded."""
-        return self.taken_at or self.modified_at or ""
+        """Best available date: when it was taken, else when the file was last
+        written on disk, and only then when it happened to be uploaded."""
+        return self.taken_at or self.source_mtime or self.modified_at or ""
 
     def to_json(self) -> bytes:
         return self.model_dump_json(exclude_none=True).encode("utf-8")

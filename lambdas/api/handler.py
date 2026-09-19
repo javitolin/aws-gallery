@@ -21,7 +21,8 @@ from pydantic import ValidationError
 
 import manifest
 import mutations
-from schemas import CategoryRequest, FavouriteRequest, KeysRequest, RenameRequest
+from schemas import (CategoryRequest, FavouriteRequest, HideRequest, KeysRequest,
+                     RenameRequest)
 from store import S3Store
 
 BUCKET = os.environ["BUCKET"]
@@ -128,12 +129,18 @@ def route_rename(body: dict, who: str, at: str) -> dict:
 def route_favourite(body: dict, who: str, at: str) -> dict:
     """Per user, so it never touches the manifest and needs no rebuild."""
     request = FavouriteRequest.model_validate(body)
-    keys = mutations.set_favourites(store, who, request.keys, on=request.on, at=at)
-    return _reply(200, {"favourites": keys, "by": who, "at": at})
+    return _reply(200, mutations.set_favourites(
+        store, who, request.keys, on=request.on, at=at))
 
 
-def route_favourites(_body: dict, who: str, _at: str) -> dict:
-    return _reply(200, {"favourites": mutations.load_favourites(store, who)})
+def route_hide(body: dict, who: str, at: str) -> dict:
+    request = HideRequest.model_validate(body)
+    return _reply(200, mutations.set_hidden(
+        store, who, request.categories, on=request.on, at=at))
+
+
+def route_prefs(_body: dict, who: str, _at: str) -> dict:
+    return _reply(200, mutations.load_prefs(store, who))
 
 
 ROUTES: dict[str, Callable[[dict, str, str], dict]] = {
@@ -141,7 +148,8 @@ ROUTES: dict[str, Callable[[dict, str, str], dict]] = {
     "/api/category": route_category,
     "/api/rename-category": route_rename,
     "/api/favourite": route_favourite,
-    "/api/favourites": route_favourites,
+    "/api/hide": route_hide,
+    "/api/prefs": route_prefs,
 }
 
 

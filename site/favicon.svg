@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#17171b"/>
+  <!-- Three stacked frames: a gallery, receding like prints in a pile. -->
+  <rect x="16" y="10" width="34" height="24" rx="3" fill="none" stroke="#3f3f4a" stroke-width="3"/>
+  <rect x="12" y="17" width="38" height="27" rx="3" fill="none" stroke="#5d5d6b" stroke-width="3"/>
+  <rect x="8"  y="24" width="44" height="30" rx="4" fill="#0d0d0f" stroke="#7aa2f7" stroke-width="3"/>
+  <!-- A horizon and a sun inside the front frame. -->
+  <circle cx="20" cy="34" r="4" fill="#7aa2f7"/>
+  <path d="M10 50 L23 38 L32 46 L40 40 L50 50 Z" fill="#7aa2f7" opacity="0.85"/>
+</svg>

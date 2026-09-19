@@ -6,8 +6,10 @@ let allItems = [
   { category: "Ofer Trip" }, { category: "Ofer Trip/שיאן" }, { category: "Ofer Trip/שיאן/deep" },
   { category: "Ofer Trip/החומה הסינית" }, { category: "Berlin 2017" }, { category: null },
 ];
-const fn = new Function("allItems", body + "; return { parentOf, leafOf, inBranch, childrenOf };");
-const { parentOf, leafOf, inBranch, childrenOf } = fn(allItems);
+// isHidden lives outside the extracted block; nothing is hidden in these cases.
+const fn = new Function("allItems", "isHidden",
+  body + "; return { parentOf, leafOf, inBranch, childrenOf };");
+const { parentOf, leafOf, inBranch, childrenOf } = fn(allItems, () => false);
 
 const eq = (label, got, want) => {
   const ok = JSON.stringify(got) === JSON.stringify(want);
@@ -23,3 +25,16 @@ eq("children of a branch", [...childrenOf("Ofer Trip").keys()].sort(),
 eq("branch includes descendants", allItems.filter(i => inBranch(i, "Ofer Trip")).length, 4);
 eq("leaf branch", allItems.filter(i => inBranch(i, "Ofer Trip/שיאן")).length, 2);
 eq("no prefix bleed", allItems.filter(i => inBranch(i, "Ofer")).length, 0);
+
+// Hiding a parent must take its descendants with it.
+const hiddenFn = new Function("allItems", "isHidden",
+  body + "; return { childrenOf };");
+const hidden = new Set(["Ofer Trip"]);
+const isHiddenReal = (c) => {
+  const path = c || "Other";
+  for (const e of hidden) if (path === e || path.startsWith(e + "/")) return true;
+  return false;
+};
+const { childrenOf: hiddenChildren } = hiddenFn(allItems, isHiddenReal);
+eq("hidden parent removes its branch", [...hiddenChildren(null).keys()].sort(),
+   ["Berlin 2017", "Other"]);

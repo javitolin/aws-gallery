@@ -134,13 +134,17 @@ def _rename(payload: dict, who: str, at: str) -> dict:
 
 
 def _favourite(payload: dict, who: str, at: str) -> dict:
-    keys = mutations.set_favourites(
+    return mutations.set_favourites(
         state["store"], who, payload.get("keys") or [], on=payload.get("on", True), at=at)
-    return {"favourites": keys}
 
 
-def _favourites(_payload: dict, who: str, _at: str) -> dict:
-    return {"favourites": mutations.load_favourites(state["store"], who)}
+def _hide(payload: dict, who: str, at: str) -> dict:
+    return mutations.set_hidden(
+        state["store"], who, payload.get("categories") or [], on=payload.get("on", True), at=at)
+
+
+def _prefs(_payload: dict, who: str, _at: str) -> dict:
+    return mutations.load_prefs(state["store"], who)
 
 
 ROUTES = {
@@ -148,7 +152,8 @@ ROUTES = {
     "/api/category": _category,
     "/api/rename-category": _rename,
     "/api/favourite": _favourite,
-    "/api/favourites": _favourites,
+    "/api/hide": _hide,
+    "/api/prefs": _prefs,
 }
 
 

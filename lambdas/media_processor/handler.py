@@ -7,6 +7,7 @@ import boto3
 
 import manifest
 import thumbnail
+import filename_dates
 from models import MediaRecord
 
 BUCKET = os.environ["BUCKET"]
@@ -36,9 +37,17 @@ def _thumb(key: str) -> str:
 # Keys are content hashes, so the display name, source path and category come
 # from the sidecar the uploader writes before the object lands. Choices made in
 # the gallery must survive reprocessing too.
-STICKY_FIELDS = ("name", "source_path", "category",
+STICKY_FIELDS = ("name", "source_path", "category", "source_mtime",
                  "archived", "archived_by", "archived_at",
                  "category_by", "category_at")
+
+
+def _previous(key: str) -> MediaRecord | None:
+    try:
+        body = s3.get_object(Bucket=BUCKET, Key=_sidecar(key))["Body"].read()
+        return MediaRecord.model_validate_json(body)
+    except Exception:
+        return None
 
 
 def _preserve_manual(record: MediaRecord) -> MediaRecord:
@@ -93,6 +102,14 @@ def _process(key: str) -> None:
     for field, value in meta.items():
         if value is not None:
             setattr(record, field, value)
+
+    # The uploader's sidecar holds the real filename and source mtime; the key
+    # is only a hash, so read them back before dating the item.
+    previous = _previous(key)
+    if not record.taken_at and previous:
+        record.taken_at = filename_dates.from_name(previous.name)
+    if previous and previous.source_mtime:
+        record.source_mtime = previous.source_mtime
 
     if thumb:
         s3.put_object(

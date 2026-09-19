@@ -15,6 +15,8 @@ let openParent = null;
 const selected = new Set();
 // Per user, so they come from the API rather than the shared manifest.
 let favourites = new Set();
+// Categories this viewer has chosen not to see. Per user, like favourites.
+let hidden = new Set();
 
 // S3 keys carry spaces and Hebrew; each segment is encoded separately so the
 // slashes survive. Assigning a raw key to src is what broke the old gallery.
@@ -164,6 +166,7 @@ function childrenOf(parent) {
   const counts = new Map();
   for (const item of allItems) {
     const path = item.category || "Other";
+    if (isHidden(path)) continue;
     if (parent && !path.startsWith(parent + "/")) continue;
     const parts = path.split("/");
     if (parts.length <= depth) continue;
@@ -200,6 +203,21 @@ function renameableCategory() {
   return special ? null : activeFilter;
 }
 
+function hideButton() {
+  const button = document.createElement("button");
+  button.className = "chip chip-edit in-group";
+  button.type = "button";
+  button.setAttribute("aria-label", `Hide ${leafOf(activeFilter)}`);
+  button.title = `Hide ${leafOf(activeFilter)} from your gallery`;
+  button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+    '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" fill="none" ' +
+    'stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" ' +
+    'stroke="currentColor" stroke-width="2"/><path d="M3 21 21 3" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round"/></svg>';
+  button.addEventListener("click", () => setHidden(activeFilter, true));
+  return button;
+}
+
 function renamePencil() {
   const button = document.createElement("button");
   button.className = "chip chip-edit";
@@ -227,7 +245,8 @@ function appendChip(bar, node, value) {
   divider.className = "chip-divider";
   const pencil = renamePencil();
   pencil.classList.add("in-group");
-  group.append(node, divider, pencil);
+  const secondDivider = divider.cloneNode();
+  group.append(node, divider, pencil, secondDivider, hideButton());
   bar.append(group);
 }
 
@@ -253,7 +272,7 @@ function renderChips() {
     appendChip(bar, chip(`All of ${leafOf(openParent)}`,
       openParent, allItems.filter((i) => inBranch(i, openParent)).length), openParent);
   } else {
-    bar.append(chip("All", "all", allItems.length));
+    bar.append(chip("All", "all", visibleItems().length));
   }
 
   for (const [branch, count] of [...childrenOf(openParent)].sort((a, b) => b[1] - a[1])) {
@@ -266,10 +285,28 @@ function renderChips() {
   if (!openParent) {
     bar.append(chip("♥ Favourites", FAVOURITES, favourites.size, "chip-fav"));
   }
+  if (!openParent) {
+    for (const entry of [...hidden].sort()) {
+      const restore = document.createElement("button");
+      restore.className = "chip chip-hidden";
+      restore.type = "button";
+      restore.title = `Show ${entry} again`;
+      restore.append(document.createTextNode(entry + " "));
+      restore.append(Object.assign(document.createElement("span"),
+        { className: "chip-n", textContent: "show" }));
+      restore.addEventListener("click", () => setHidden(entry, false));
+      bar.append(restore);
+    }
+  }
   if (!openParent && archivedItems.length) {
     bar.append(chip("Archive", ARCHIVE, archivedItems.length, "chip-archive"));
   }
   bar.hidden = false;
+}
+
+// "All" means all you have not hidden.
+function visibleItems() {
+  return allItems.filter((i) => !isHidden(i.category));
 }
 
 function applyFilter() {
@@ -278,7 +315,7 @@ function applyFilter() {
   } else if (activeFilter === FAVOURITES) {
     shown = allItems.filter((i) => favourites.has(i.key));
   } else if (activeFilter === "all") {
-    shown = allItems;
+    shown = visibleItems();
   } else {
     // A branch shows everything beneath it, not only its direct members.
     shown = allItems.filter((i) => inBranch(i, activeFilter));
@@ -410,20 +447,49 @@ async function favouriteSelected() {
   const keys = [...selected];
   if (await post("/api/favourite", { keys, on: true }, el("do-fav"), "Saving…")) {
     cancelSelect();
-    await loadFavourites();
+    await loadPrefs();
     renderChips();
     applyFilter();
   }
 }
 
-async function loadFavourites() {
+async function loadPrefs() {
   try {
-    const response = await fetch("/api/favourites", { cache: "no-store" });
+    const response = await fetch("/api/prefs", { cache: "no-store" });
     if (response.status === 401) return reauthenticate();
-    if (response.ok) favourites = new Set((await response.json()).favourites || []);
+    if (response.ok) {
+      const prefs = await response.json();
+      favourites = new Set(prefs.favourites || []);
+      hidden = new Set(prefs.hidden || []);
+    }
   } catch {
     favourites = new Set();
+    hidden = new Set();
   }
+}
+
+// Hiding a parent hides everything nested beneath it, matching how selecting
+// one shows its descendants.
+function isHidden(category) {
+  const path = category || "Other";
+  for (const entry of hidden) {
+    if (path === entry || path.startsWith(entry + "/")) return true;
+  }
+  return false;
+}
+
+async function setHidden(category, on) {
+  const response = await postJson("/api/hide", { categories: [category], on });
+  if (response.status === 401) return reauthenticate();
+  if (!response.ok) {
+    status.hidden = false;
+    status.textContent = `Could not ${on ? "hide" : "restore"} ${category}`;
+    return;
+  }
+  hidden = new Set((await response.json()).hidden || []);
+  if (on && activeFilter === category) { activeFilter = "all"; openParent = null; }
+  renderChips();
+  applyFilter();
 }
 
 async function moveSelected() {
@@ -585,7 +651,7 @@ async function load() {
     if (!response.ok) throw new Error(`manifest returned ${response.status}`);
     const manifest = await response.json();
 
-    await loadFavourites();
+    await loadPrefs();
     allItems = (manifest.items || []).filter((i) => i.renderable !== false);
     archivedItems = manifest.archive || [];
 

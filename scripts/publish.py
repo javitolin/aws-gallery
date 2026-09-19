@@ -23,10 +23,14 @@ import subprocess
 import sys
 import time
 import urllib.parse
+from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
 from botocore.exceptions import ClientError
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lambdas" / "media_processor"))
+import filename_dates  # noqa: E402
 
 BUCKET = os.environ["GALLERY_BUCKET"]
 # Drop new files here; the web-ready tree is generated from it.
@@ -137,11 +141,20 @@ def write_sidecar(s3, key: str, rel: str, path: Path, category: str | None) -> N
         pass
 
     manual = record.get("category_by")
+    # The filename dates these far better than the upload time, and the
+    # uploader is the only place the real filename is still known.
+    if not record.get("taken_at"):
+        from_name = filename_dates.from_name(path.name)
+        if from_name:
+            record["taken_at"] = from_name
+    stat = path.stat()
     record.update({
         "key": key,
         "name": path.name,
         "source_path": rel,
-        "size": path.stat().st_size,
+        "size": stat.st_size,
+        # Last resort for dating: still far better than the upload time.
+        "source_mtime": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
     })
     if not manual:
         record["category"] = category
@@ -159,6 +172,8 @@ def main() -> int:
     parser.add_argument("--source", type=Path, default=SOURCE)
     parser.add_argument("--raw", type=Path, default=RAW_SOURCE)
     parser.add_argument("--no-prepare", action="store_true")
+    parser.add_argument("--refresh", action="store_true",
+                        help="rewrite sidecars for everything, uploading nothing new")
     args = parser.parse_args()
 
     if not args.no_prepare:
@@ -202,7 +217,7 @@ def main() -> int:
         seen_keys[key] = rel
 
         record = done.get(rel)
-        if record and record.get("key") == key:
+        if record and record.get("key") == key and not args.refresh:
             continue
         plan.append((rel, key, size, prefix, category_of(rel)))
     print(" done\n")

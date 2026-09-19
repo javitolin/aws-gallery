@@ -14,7 +14,7 @@ from store import Store
 
 MEDIA_PREFIX = "media/"
 META_PREFIX = "meta/"
-FAVOURITES_PREFIX = "favourites/"
+PREFS_PREFIX = "prefs/"
 
 # S3 tag values allow Unicode letters and digits, spaces, and + - = . _ : / @
 TAG_SAFE = re.compile(r"[^\w +\-=.:/@]", re.UNICODE)
@@ -27,9 +27,9 @@ def sidecar_key(media_key: str) -> str:
     return f"{META_PREFIX}{media_key[len(MEDIA_PREFIX):]}.json"
 
 
-def favourites_key(email: str) -> str:
+def prefs_key(email: str) -> str:
     """One file per user. Hashed so member emails never appear in object keys."""
-    return f"{FAVOURITES_PREFIX}{hashlib.sha256(email.encode()).hexdigest()[:16]}.json"
+    return f"{PREFS_PREFIX}{hashlib.sha256(email.encode()).hexdigest()[:16]}.json"
 
 
 def load_record(store: Store, media_key: str) -> MediaRecord | None:
@@ -127,19 +127,36 @@ def rename_category(store: Store, old: str, new: str, *, who: str, at: str) -> t
     return sum(1 for renamed in results if renamed), failures
 
 
-def load_favourites(store: Store, email: str) -> list[str]:
-    body = store.get(favourites_key(email))
-    return json.loads(body).get("keys", []) if body else []
+def load_prefs(store: Store, email: str) -> dict:
+    """Per-user view settings. Kept out of the manifest so it stays identical
+    for every viewer, and so one person's choices are invisible to the rest."""
+    body = store.get(prefs_key(email))
+    saved = json.loads(body) if body else {}
+    return {
+        "favourites": saved.get("favourites", []),
+        "hidden": saved.get("hidden", []),
+    }
 
 
-def set_favourites(store: Store, email: str, keys: list[str], *, on: bool, at: str) -> list[str]:
-    """Per user, in their own file: one person's favourites are not another's,
-    and keeping them out of the manifest leaves it identical for everyone."""
-    current = set(load_favourites(store, email))
+def save_prefs(store: Store, email: str, prefs: dict, at: str) -> dict:
+    store.put(prefs_key(email),
+              json.dumps({**prefs, "email": email, "updated_at": at}).encode("utf-8"))
+    return prefs
+
+
+def set_favourites(store: Store, email: str, keys: list[str], *, on: bool, at: str) -> dict:
+    prefs = load_prefs(store, email)
+    current = set(prefs["favourites"])
     wanted = {k for k in keys if k.startswith(MEDIA_PREFIX)}
-    updated = sorted(current | wanted if on else current - wanted)
-    store.put(
-        favourites_key(email),
-        json.dumps({"email": email, "keys": updated, "updated_at": at}).encode("utf-8"),
-    )
-    return updated
+    prefs["favourites"] = sorted(current | wanted if on else current - wanted)
+    return save_prefs(store, email, prefs, at)
+
+
+def set_hidden(store: Store, email: str, categories: list[str], *, on: bool, at: str) -> dict:
+    """Hiding a category hides everything nested beneath it too, matching how
+    selecting one shows its descendants."""
+    prefs = load_prefs(store, email)
+    current = set(prefs["hidden"])
+    wanted = {c.strip("/") for c in categories if c.strip("/")}
+    prefs["hidden"] = sorted(current | wanted if on else current - wanted)
+    return save_prefs(store, email, prefs, at)

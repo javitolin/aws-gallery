@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUCKET="${GALLERY_BUCKET:?set it in config.env}"
 DIST="${DIST:-$(cd "$ROOT/terraform" && terraform output -raw distribution_id)}"
 
-FILES=(index.html app.js styles.css)
+FILES=(index.html app.js styles.css favicon.svg)
 
 for file in "${FILES[@]}"; do
   aws s3 cp "$ROOT/site/$file" "s3://$BUCKET/site/$file" \
@@ -22,5 +22,5 @@ done
 
 aws cloudfront create-invalidation \
   --distribution-id "$DIST" \
-  --paths "/" "/index.html" "/app.js" "/styles.css" \
+  --paths "/" "/index.html" "/app.js" "/styles.css" "/favicon.svg" \
   --query 'Invalidation.Status' --output text

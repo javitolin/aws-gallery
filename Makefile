@@ -8,7 +8,7 @@ endif
 
 VENV := .venv/bin
 
-.PHONY: help venv layers test dev plan apply site backfill publish publish-check transcode rebuild add-user cert-status outputs
+.PHONY: help venv layers test dev plan apply site backfill publish publish-check transcode rebuild add-user reset-password cert-status outputs
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
@@ -42,6 +42,14 @@ add-user: ## add a gallery user: make add-user EMAIL=them@example.com
 	 aws cognito-idp admin-set-user-password --user-pool-id $$pool --username "$(EMAIL)" --password "$$pw" && \
 	 echo "" && echo "  user:     $(EMAIL)" && echo "  password: $$pw" && \
 	 echo "  they must change it at first sign-in. Send it out-of-band, not by email."
+
+reset-password: ## reset a user's password: make reset-password EMAIL=them@example.com
+	@test -n "$(EMAIL)" || { echo "usage: make reset-password EMAIL=them@example.com"; exit 1; }
+	@pool=$$(cd terraform && terraform output -raw user_pool_id); \
+	 pw="Gallery-$$($(VENV)/python -c 'import secrets,string;a=string.ascii_letters+string.digits;print("".join(secrets.choice(a) for _ in range(14)))')"; \
+	 aws cognito-idp admin-set-user-password --user-pool-id $$pool --username "$(EMAIL)" --password "$$pw" && \
+	 echo "" && echo "  user:     $(EMAIL)" && echo "  password: $$pw" && \
+	 echo "  must be changed at next sign-in. Any passkey already registered still works."
 
 rebuild: ## rebuild manifest.json from the sidecars
 	@aws lambda invoke --function-name gallery-media-processor \

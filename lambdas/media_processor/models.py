@@ -44,8 +44,15 @@ class MediaRecord(BaseModel):
 
     def sort_key(self) -> str:
         """Best available date: when it was taken, else when the file was last
-        written on disk, and only then when it happened to be uploaded."""
-        return self.taken_at or self.source_mtime or self.modified_at or ""
+        written on disk, and only then when it happened to be uploaded.
+
+        Anything before 1990 is a clockless camera writing an epoch-relative
+        stamp, and is worse than no date at all since it buries the item.
+        """
+        for candidate in (self.taken_at, self.source_mtime, self.modified_at):
+            if candidate and candidate >= "1990":
+                return candidate
+        return self.modified_at or ""
 
     def to_json(self) -> bytes:
         return self.model_dump_json(exclude_none=True).encode("utf-8")

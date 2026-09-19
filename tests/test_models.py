@@ -143,3 +143,15 @@ class Hiding(unittest.TestCase):
         with self.assertRaises(ValidationError):
             HideRequest(categories=[])
         self.assertTrue(HideRequest(categories=["Ofer Trip"]).on)
+
+
+class EpochDates(unittest.TestCase):
+    def test_a_1970_stamp_is_skipped_for_the_next_best(self):
+        record = MediaRecord(key="k", name="n", taken_at="1970-01-01T00:33:37Z",
+                             source_mtime="2017-12-17T00:00:00Z")
+        self.assertTrue(record.sort_key().startswith("2017"))
+
+    def test_all_implausible_falls_back_to_upload_time(self):
+        record = MediaRecord(key="k", name="n", source_mtime="1970-01-01T00:00:00Z",
+                             modified_at="2026-09-19T00:00:00Z")
+        self.assertTrue(record.sort_key().startswith("2026"))

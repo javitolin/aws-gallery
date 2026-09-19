@@ -37,3 +37,4 @@ tf.plan
 .devcache/
 config.env
 terraform/backend.hcl
+blog-post.md

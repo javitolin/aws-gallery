@@ -261,7 +261,9 @@ function renderChips() {
     appendChip(bar, chip(leafOf(branch) + (hasKids ? " ›" : ""), branch, count), branch);
   }
 
-  if (!openParent && favourites.size) {
+  // Shown even at zero, so the filter is discoverable before anything is
+  // hearted — and so you can get back out of it once it empties.
+  if (!openParent) {
     bar.append(chip("♥ Favourites", FAVOURITES, favourites.size, "chip-fav"));
   }
   if (!openParent && archivedItems.length) {
@@ -293,7 +295,9 @@ function applyFilter() {
 function renderTimeline(items) {
   if (!items.length) {
     status.hidden = false;
-    status.textContent = "Nothing here.";
+    status.textContent = activeFilter === FAVOURITES
+      ? "No favourites yet — hover a photo and click the heart."
+      : "Nothing here.";
     return;
   }
   status.hidden = true;
@@ -340,17 +344,33 @@ function fillCategoryList() {
   }
 }
 
+// CloudFront signs origin requests to the Lambda URL with SigV4, and Lambda
+// rejects unsigned payloads, so the body hash has to come from the client.
+// Without this every write returns 403 with a signature mismatch.
+async function bodyHash(body) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function postJson(path, payload) {
+  const body = JSON.stringify(payload);
+  return fetch(path, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-amz-content-sha256": await bodyHash(body),
+    },
+    body,
+  });
+}
+
 async function post(path, payload, button, busyLabel) {
   const label = button.textContent;
   button.disabled = true;
   button.textContent = busyLabel;
   try {
-    const response = await fetch(path, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (response.status === 403) { window.location.href = "/auth/login"; return false; }
+    const response = await postJson(path, payload);
+    if (response.status === 401) { window.location.href = "/auth/login"; return false; }
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || `failed (${response.status})`);
     return true;
@@ -367,11 +387,7 @@ async function post(path, payload, button, busyLabel) {
 async function setFavourite(key, on, node) {
   node.classList.toggle("on", on);
   try {
-    const response = await fetch("/api/favourite", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ keys: [key], on }),
-    });
+    const response = await postJson("/api/favourite", { keys: [key], on });
     if (!response.ok) throw new Error(`failed (${response.status})`);
     favourites = new Set((await response.json()).favourites || []);
     renderChips();

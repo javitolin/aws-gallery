@@ -329,6 +329,73 @@ function applyFilter() {
   renderTimeline(shown);
 }
 
+const EXT_GLYPH = {
+  psd: "◳", veg: "✁", bak: "⎘", exe: "⚙", db: "▤", json: "{}", tar: "⊞", zip: "⊞",
+};
+
+// Archived files are mostly not viewable — project files, backups, stray
+// binaries. A file listing tells you more about them than a grid of glyphs.
+function renderFileList(items) {
+  const table = document.createElement("table");
+  table.className = "filelist";
+  table.innerHTML =
+    "<thead><tr><th></th><th>Name</th><th>From</th><th>Size</th><th>Storage</th><th></th></tr></thead>";
+  const body = document.createElement("tbody");
+
+  for (const item of items) {
+    const ext = (item.name || "").split(".").pop().toLowerCase();
+    const row = document.createElement("tr");
+
+    const glyph = document.createElement("td");
+    glyph.className = "fl-glyph";
+    glyph.textContent = EXT_GLYPH[ext] || GLYPH[item.kind] || GLYPH.other;
+
+    const name = document.createElement("td");
+    name.className = "fl-name";
+    name.textContent = item.name;
+
+    const from = document.createElement("td");
+    from.className = "fl-dim";
+    from.textContent = item.category || "—";
+
+    const size = document.createElement("td");
+    size.className = "fl-size";
+    size.textContent = bytes(item.size || 0);
+
+    const store = document.createElement("td");
+    store.className = "fl-dim";
+    store.textContent = (item.storage_class || "").replace(/_/g, " ").toLowerCase();
+
+    const act = document.createElement("td");
+    act.className = "fl-act";
+    if (item.playable) {
+      const open = document.createElement("button");
+      open.className = "linklike";
+      open.type = "button";
+      open.textContent = "Open";
+      open.addEventListener("click", () => openLightbox(items.indexOf(item)));
+      act.append(open);
+    }
+    const dl = document.createElement("a");
+    dl.className = "linklike";
+    dl.href = url(item.key);
+    dl.setAttribute("download", item.name);
+    dl.textContent = "Download";
+    act.append(dl);
+
+    row.append(glyph, name, from, size, store, act);
+    body.append(row);
+  }
+  table.append(body);
+  timeline.append(table);
+
+  const note = document.createElement("p");
+  note.className = "archive-note";
+  note.textContent =
+    "Kept in Glacier to cut cost, and still downloadable — Glacier Instant Retrieval needs no restore.";
+  timeline.append(note);
+}
+
 function renderTimeline(items) {
   if (!items.length) {
     status.hidden = false;
@@ -338,6 +405,8 @@ function renderTimeline(items) {
     return;
   }
   status.hidden = true;
+
+  if (activeFilter === ARCHIVE) return renderFileList(items);
 
   const groups = new Map();
   for (const item of items) {

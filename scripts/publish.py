@@ -125,6 +125,12 @@ def prepare(raw: Path, web: Path, apply: bool) -> bool:
     return subprocess.run(cmd).returncode == 0
 
 
+def meta_key_for(key: str) -> str:
+    """Sidecars mirror the key without its prefix, so media/ and archive/ both
+    get one. Keys are content hashes, so the two can never collide."""
+    return f"{META_PREFIX}{key.split('/', 1)[1]}.json"
+
+
 def write_sidecar(s3, key: str, rel: str, path: Path, category: str | None) -> None:
     """Written before the object, so the S3-triggered processor merges onto it
     rather than racing it.
@@ -133,7 +139,7 @@ def write_sidecar(s3, key: str, rel: str, path: Path, category: str | None) -> N
     what is already uploaded — except where the category was changed from the
     gallery, which wins over the folder layout.
     """
-    meta_key = f"{META_PREFIX}{key[len(MEDIA_PREFIX):]}.json"
+    meta_key = meta_key_for(key)
     record = {}
     try:
         record = json.loads(s3.get_object(Bucket=BUCKET, Key=meta_key)["Body"].read())
@@ -248,8 +254,7 @@ def main() -> int:
         path = args.source / rel
         if already_in_s3(s3, key, size):
             # Bytes are already there, but the folder may have moved since.
-            if prefix == MEDIA_PREFIX:
-                write_sidecar(s3, key, rel, path, category)
+            write_sidecar(s3, key, rel, path, category)
             done[rel] = {"key": key, "size": size, "category": category,
                          "uploaded_at": "pre-existing"}
             save_checkpoint(state)
@@ -268,8 +273,7 @@ def main() -> int:
             # Passing a Hebrew or spaced category raw yields InvalidTag.
             extra["Tagging"] = urllib.parse.urlencode({"category": category})
 
-        if prefix == MEDIA_PREFIX:
-            write_sidecar(s3, key, rel, path, category)
+        write_sidecar(s3, key, rel, path, category)
 
         started = time.time()
         try:

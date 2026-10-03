@@ -465,6 +465,46 @@ body.no-select .fav {
   outline-offset: -3px;
 }
 
+.filelist {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.filelist th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0 0.7rem 0.5rem;
+  border-bottom: 1px solid #ffffff14;
+}
+.filelist td { padding: 0.6rem 0.7rem; border-bottom: 1px solid #ffffff0d; vertical-align: middle; }
+.filelist tr:hover td { background: #ffffff08; }
+.fl-glyph { width: 1.6rem; color: var(--muted); font-size: 1rem; text-align: center; }
+.fl-name { word-break: break-word; }
+.fl-dim { color: var(--muted); }
+.fl-size { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fl-act { white-space: nowrap; text-align: right; }
+
+.linklike {
+  background: none;
+  border: 0;
+  padding: 0 0 0 0.75rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: none;
+}
+.linklike:hover { text-decoration: underline; }
+
+@media (max-width: 620px) {
+  .filelist th:nth-child(3), .filelist td:nth-child(3),
+  .filelist th:nth-child(5), .filelist td:nth-child(5) { display: none; }
+}
+
 .lightbox {
   position: fixed;
   inset: 0;

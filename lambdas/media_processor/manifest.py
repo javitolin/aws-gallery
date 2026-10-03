@@ -63,11 +63,28 @@ def _records(bucket: str, meta_prefix: str) -> tuple[list[MediaRecord], list[Med
     return live, archived
 
 
-def _archive_objects(bucket: str, archive_prefix: str) -> list[ArchiveEntry]:
+def _archive_name(bucket: str, key: str, meta_prefix: str) -> tuple[str, str | None]:
+    """Archive keys are content hashes, so the display name comes from the
+    sidecar the uploader writes beside them."""
+    try:
+        body = s3.get_object(Bucket=bucket, Key=f"{meta_prefix}{key.split('/', 1)[1]}.json")
+        record = MediaRecord.model_validate_json(body["Body"].read())
+        return record.name, record.category
+    except Exception:
+        return os.path.basename(key), None
+
+
+def _archive_objects(bucket: str, archive_prefix: str, meta_prefix: str) -> list[ArchiveEntry]:
+    named = {}
+    for obj in _paginate(bucket, archive_prefix):
+        if not obj["Key"].endswith("/"):
+            named[obj["Key"]] = _archive_name(bucket, obj["Key"], meta_prefix)
+
     entries = [
         ArchiveEntry(
             key=obj["Key"],
-            name=os.path.basename(obj["Key"]),
+            name=named[obj["Key"]][0],
+            category=named[obj["Key"]][1],
             size=obj["Size"],
             storage_class=obj.get("StorageClass", "STANDARD"),
             kind=kind_for(obj["Key"]),
@@ -75,7 +92,7 @@ def _archive_objects(bucket: str, archive_prefix: str) -> list[ArchiveEntry]:
             playable=os.path.splitext(obj["Key"])[1].lower() in BROWSER_PLAYABLE,
         )
         for obj in _paginate(bucket, archive_prefix)
-        if not obj["Key"].endswith("/")
+        if obj["Key"] in named
     ]
     entries.sort(key=_by_name)
     return entries
@@ -104,7 +121,7 @@ def rebuild(bucket: str, meta_prefix: str, archive_prefix: str, manifest_key: st
     manifest = Manifest(
         generated_at=datetime.now(timezone.utc).isoformat(),
         items=items,
-        archive=_archive_objects(bucket, archive_prefix) + [
+        archive=_archive_objects(bucket, archive_prefix, meta_prefix) + [
             _as_archive_entry(record) for record in archived
         ],
     )
